@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spatia - Soundscape Composer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col items-center justify-between p-4 overflow-hidden select-none">
+
+    <!-- Header -->
+    <div class="text-center mt-4 z-10 pointer-events-none">
+        <h2 class="text-3xl font-light tracking-[0.2em] text-purple-300">SPATIA</h2>
+        <p class="text-gray-500 text-xs uppercase mt-1">Spatial Composer</p>
+    </div>
+
+    <!-- The 3D Room -->
+    <div class="flex-grow flex items-center justify-center w-full relative">
+        <div id="room" class="room-grid relative w-full aspect-square rounded-full border-2 border-gray-700 shadow-2xl transition-colors duration-300">
+
+            <!-- Room Labels -->
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                <div class="w-px h-full bg-gray-500"></div>
+                <div class="h-px w-full bg-gray-500 absolute"></div>
+            </div>
+            <div class="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 font-mono pointer-events-none">FRONT</div>
+            <div class="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 font-mono pointer-events-none">BEHIND</div>
+
+            <!-- The Listener (Center) -->
+            <div class="w-4 h-4 bg-emerald-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center shadow-[0_0_15px_#10b981]">
+                <div class="absolute -top-1 w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-b-[5px] border-b-emerald-400"></div>
+            </div>
+
+            <!-- Drop Zone Hint -->
+            <div id="drop-hint" class="absolute inset-0 border-4 border-emerald-500/0 rounded-full pointer-events-none transition-all duration-300"></div>
+        </div>
+    </div>
+
+    <!-- The Dock -->
+    <div class="w-full max-w-md mb-8 z-50">
+        <p class="text-center text-gray-500 text-xs mb-2">DRAG ICONS INTO SPACE</p>
+        <div id="dock" class="bg-gray-800/80 backdrop-blur-md rounded-2xl p-4 flex justify-around items-center border border-gray-700 shadow-xl">
+            <!-- Slots will be populated by JS -->
+        </div>
+    </div>
+
+    <!-- Start Overlay -->
+    <div id="start-overlay" class="absolute inset-0 bg-gray-900/90 z-[100] flex flex-col items-center justify-center p-6">
+        <h1 class="text-5xl font-thin text-purple-300 mb-6 tracking-widest">SPATIA</h1>
+        <button id="initBtn" class="bg-white text-black px-8 py-3 rounded-full font-bold hover:scale-105 transition transform shadow-[0_0_30px_rgba(255,255,255,0.3)]">
+            ENTER STUDIO
+        </button>
+        <p class="mt-4 text-gray-400 text-sm">Headphones Required</p>
+    </div>
+
+    <script src="js/spatia.js"></script>
+</body>
+</html>
