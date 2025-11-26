@@ -8,7 +8,7 @@
 /* Sound Nodes */
 .sound-node {
     transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s;
-    touch-action: none;
+    touch-action: pan-x;
     cursor: grab;
     position: absolute;
     z-index: 50;
@@ -18,6 +18,10 @@
     font-size: 1.5rem;
     border-radius: 50%;
     user-select: none;
+}
+
+.sound-node.active {
+    touch-action: none;
 }
 
 .sound-node:active {

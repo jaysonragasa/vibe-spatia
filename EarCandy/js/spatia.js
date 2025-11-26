@@ -422,57 +422,68 @@ class SoundSource {
             touchStartPos = { x: cx, y: cy };
             hasMoved = false;
             isDragging = true;
-            const rect = this.el.getBoundingClientRect();
-            
-            if (!this.isInstance && !this.active) {
-                // Create new instance for dragging
-                const instance = new SoundSource(
-                    `${this.id}-${Date.now()}`,
-                    this.type,
-                    this.icon,
-                    this.color,
-                    this.label,
-                    this.audioEngine,
-                    this.audioBuffer,
-                    true,
-                    this.fileName,
-                    this.fileData,
-                    this.streamUrl,
-                    this.iconImage
-                );
-                window.spatiaApp.sounds.push(instance);
-                
-                instance.el.classList.remove('docked');
-                instance.el.style.position = 'fixed';
-                instance.el.style.left = rect.left + 'px';
-                instance.el.style.top = rect.top + 'px';
-                document.body.appendChild(instance.el);
-                
-                draggedInstance = instance;
-            } else {
-                draggedInstance = this;
-                // Pause movement during drag
-                if (this.active && this.movement.animationId) {
-                    this.stopMovement();
-                    draggedInstance.wasMoving = true;
-                }
-                if (!this.active) {
-                    this.el.classList.remove('docked');
-                    this.el.style.position = 'fixed';
-                    document.body.appendChild(this.el);
-                }
-            }
-            
-            dragOffset.x = cx - rect.left;
-            dragOffset.y = cy - rect.top;
-            draggedInstance.el.style.zIndex = 100;
         };
 
-        const updateDrag = (cx, cy) => {
+        const updateDrag = (cx, cy, e) => {
             if (!isDragging) return;
             
-            const moveDistance = Math.sqrt((cx - touchStartPos.x) ** 2 + (cy - touchStartPos.y) ** 2);
-            if (moveDistance > 10) hasMoved = true;
+            const deltaX = cx - touchStartPos.x;
+            const deltaY = cy - touchStartPos.y;
+            const moveDistance = Math.sqrt(deltaX ** 2 + deltaY ** 2);
+            
+            // Only start drag if moving upward (negative Y)
+            if (!hasMoved && moveDistance > 10) {
+                if (deltaY >= 0) {
+                    // Moving down or horizontal - cancel drag for scroll
+                    isDragging = false;
+                    return;
+                }
+                // Confirmed upward drag - prevent scroll
+                if (e) e.preventDefault();
+                hasMoved = true;
+                const rect = this.el.getBoundingClientRect();
+                
+                if (!this.isInstance && !this.active) {
+                    const instance = new SoundSource(
+                        `${this.id}-${Date.now()}`,
+                        this.type,
+                        this.icon,
+                        this.color,
+                        this.label,
+                        this.audioEngine,
+                        this.audioBuffer,
+                        true,
+                        this.fileName,
+                        this.fileData,
+                        this.streamUrl,
+                        this.iconImage
+                    );
+                    window.spatiaApp.sounds.push(instance);
+                    
+                    instance.el.classList.remove('docked');
+                    instance.el.style.position = 'fixed';
+                    instance.el.style.left = rect.left + 'px';
+                    instance.el.style.top = rect.top + 'px';
+                    document.body.appendChild(instance.el);
+                    
+                    draggedInstance = instance;
+                } else {
+                    draggedInstance = this;
+                    if (this.active && this.movement.animationId) {
+                        this.stopMovement();
+                        draggedInstance.wasMoving = true;
+                    }
+                    if (!this.active) {
+                        this.el.classList.remove('docked');
+                        this.el.style.position = 'fixed';
+                        document.body.appendChild(this.el);
+                    }
+                }
+                
+                dragOffset.x = touchStartPos.x - rect.left;
+                dragOffset.y = touchStartPos.y - rect.top;
+                draggedInstance.el.style.zIndex = 100;
+            }
             
             if (!hasMoved || !draggedInstance) return;
             
@@ -545,10 +556,14 @@ class SoundSource {
         };
 
         this.el.addEventListener('mousedown', e => { e.preventDefault(); startDrag(e.clientX, e.clientY); });
-        window.addEventListener('mousemove', e => updateDrag(e.clientX, e.clientY));
+        window.addEventListener('mousemove', e => updateDrag(e.clientX, e.clientY, null));
         window.addEventListener('mouseup', e => endDrag(e.clientX, e.clientY));
-        this.el.addEventListener('touchstart', e => { e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
-        window.addEventListener('touchmove', e => { if (isDragging) updateDrag(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+        this.el.addEventListener('touchstart', e => { startDrag(e.touches[0].clientX, e.touches[0].clientY); });
+        window.addEventListener('touchmove', e => { 
+            if (isDragging) {
+                updateDrag(e.touches[0].clientX, e.touches[0].clientY, e);
+            }
+        }, { passive: false });
         window.addEventListener('touchend', e => { if (isDragging) endDrag(e.changedTouches[0].clientX, e.changedTouches[0].clientY); });
     }
 }
