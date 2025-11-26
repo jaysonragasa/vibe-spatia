@@ -1,7 +1,10 @@
-// Configuration constants
+// Configuration
 export const CONFIG = {
-    ROOM_SCALE: 15, // Meters
-    FADE_TIME: 0.5, // Seconds
+    ROOM_SCALE: 15,
+    ROOM_RADIUS: 200,
+    FADE_TIME: 0.5,
+    USE_FILTERS: false,
+    ENABLE_STREAMING: true,
     SOUND_DEFINITIONS: [
         { id: '528', type: '528', icon: '✨', color: '#d8b4fe', label: 'Healing' },
         { id: 'ocean', type: 'ocean', icon: '🌊', color: '#38bdf8', label: 'Waves' },

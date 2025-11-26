@@ -100,6 +100,7 @@ class SoundSource {
         this.filterNode = null;
         this.movement = { type: 'static', speed: 1, distance: 3, animationId: null };
         this.volume = 1;
+        this.normalizedPos = { x: 0, z: 0 }; // Store position as ratio of room size
         
         // Audio element will be created when playing
         this.audioElement = null;
@@ -300,6 +301,24 @@ class SoundSource {
         }
     }
 
+    updateVisualPosition() {
+        if (!this.active || !this.pannerNode) return;
+        const room = document.getElementById('room');
+        const roomRect = room.getBoundingClientRect();
+        const centerX = roomRect.width / 2;
+        const centerY = roomRect.height / 2;
+        
+        const audioX = this.pannerNode.positionX.value;
+        const audioZ = this.pannerNode.positionZ.value;
+        const scale = roomRect.width / CONFIG.ROOM_SCALE;
+        
+        const visualX = centerX + (audioX * scale) - 24;
+        const visualY = centerY + (audioZ * scale) - 24;
+        
+        this.el.style.left = visualX + 'px';
+        this.el.style.top = visualY + 'px';
+    }
+
     startMovement() {
         if (this.movement.animationId) return;
         const startTime = Date.now();
@@ -330,10 +349,10 @@ class SoundSource {
 
             this.updateAudioPosition(x, z);
             
-            // Update visual position
-            const scale = roomRect.width / (CONFIG.ROOM_SCALE * 2);
-            const visualX = centerX + (x * scale) - 24; // 24 = half icon width
-            const visualY = centerY + (z * scale) - 24;
+            // Update visual position (room-relative)
+            const scale = roomRect.width / CONFIG.ROOM_SCALE;
+            const visualX = (roomRect.width / 2) + (x * scale) - 24;
+            const visualY = (roomRect.height / 2) + (z * scale) - 24;
             this.el.style.left = visualX + 'px';
             this.el.style.top = visualY + 'px';
             
@@ -431,14 +450,14 @@ class SoundSource {
             const deltaY = cy - touchStartPos.y;
             const moveDistance = Math.sqrt(deltaX ** 2 + deltaY ** 2);
             
-            // Only start drag if moving upward (negative Y)
+            // Only apply upward-only restriction for docked icons
             if (!hasMoved && moveDistance > 10) {
-                if (deltaY >= 0) {
-                    // Moving down or horizontal - cancel drag for scroll
+                if (!this.active && deltaY >= 0) {
+                    // Docked icon: only drag upward, cancel for horizontal/down
                     isDragging = false;
                     return;
                 }
-                // Confirmed upward drag - prevent scroll
+                // Confirmed drag - prevent scroll
                 if (e) e.preventDefault();
                 hasMoved = true;
                 const rect = this.el.getBoundingClientRect();
@@ -461,10 +480,11 @@ class SoundSource {
                     window.spatiaApp.sounds.push(instance);
                     
                     instance.el.classList.remove('docked');
-                    instance.el.style.position = 'fixed';
-                    instance.el.style.left = rect.left + 'px';
-                    instance.el.style.top = rect.top + 'px';
-                    document.body.appendChild(instance.el);
+                    instance.el.style.position = 'absolute';
+                    const roomRect = room.getBoundingClientRect();
+                    instance.el.style.left = (rect.left - roomRect.left) + 'px';
+                    instance.el.style.top = (rect.top - roomRect.top) + 'px';
+                    room.appendChild(instance.el);
                     
                     draggedInstance = instance;
                 } else {
@@ -475,8 +495,8 @@ class SoundSource {
                     }
                     if (!this.active) {
                         this.el.classList.remove('docked');
-                        this.el.style.position = 'fixed';
-                        document.body.appendChild(this.el);
+                        this.el.style.position = 'absolute';
+                        room.appendChild(this.el);
                     }
                 }
                 
@@ -487,10 +507,9 @@ class SoundSource {
             
             if (!hasMoved || !draggedInstance) return;
             
-            draggedInstance.el.style.left = (cx - dragOffset.x) + 'px';
-            draggedInstance.el.style.top = (cy - dragOffset.y) + 'px';
-
             const roomRect = room.getBoundingClientRect();
+            draggedInstance.el.style.left = (cx - roomRect.left - dragOffset.x) + 'px';
+            draggedInstance.el.style.top = (cy - roomRect.top - dragOffset.y) + 'px';
             const centerX = roomRect.left + roomRect.width / 2;
             const centerY = roomRect.top + roomRect.height / 2;
             const radius = roomRect.width / 2;
