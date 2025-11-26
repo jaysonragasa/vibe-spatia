@@ -28,8 +28,8 @@
             <div class="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 font-mono pointer-events-none">BEHIND</div>
 
             <!-- The Listener (Center) -->
-            <div class="w-4 h-4 bg-emerald-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center justify-center shadow-[0_0_15px_#10b981]">
-                <div class="absolute -top-1 w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-b-[5px] border-b-emerald-400"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                <img src="images/head.png" alt="Listener" class="w-10 h-10" />
             </div>
 
             <!-- Drop Zone Hint -->
@@ -38,9 +38,9 @@
     </div>
 
     <!-- The Dock -->
-    <div class="w-full max-w-md mb-8 z-50">
+    <div class="w-full mb-8 z-50 px-4">
         <p class="text-center text-gray-500 text-xs mb-2">DRAG ICONS INTO SPACE</p>
-        <div id="dock" class="bg-gray-800/80 backdrop-blur-md rounded-2xl p-4 flex justify-around items-center border border-gray-700 shadow-xl">
+        <div id="dock" class="bg-gray-800/80 backdrop-blur-md rounded-2xl p-4 flex justify-around items-center border border-gray-700 shadow-xl md:flex-wrap overflow-x-auto">
             <!-- Slots will be populated by JS -->
         </div>
     </div>

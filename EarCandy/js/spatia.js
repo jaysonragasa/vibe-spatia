@@ -413,10 +413,14 @@ class SoundSource {
         const room = document.getElementById('room');
         let isDragging = false;
         let dragOffset = { x: 0, y: 0 };
+        let touchStartPos = { x: 0, y: 0 };
+        let hasMoved = false;
 
         let draggedInstance = null;
         
         const startDrag = (cx, cy) => {
+            touchStartPos = { x: cx, y: cy };
+            hasMoved = false;
             isDragging = true;
             const rect = this.el.getBoundingClientRect();
             
@@ -465,7 +469,13 @@ class SoundSource {
         };
 
         const updateDrag = (cx, cy) => {
-            if (!isDragging || !draggedInstance) return;
+            if (!isDragging) return;
+            
+            const moveDistance = Math.sqrt((cx - touchStartPos.x) ** 2 + (cy - touchStartPos.y) ** 2);
+            if (moveDistance > 10) hasMoved = true;
+            
+            if (!hasMoved || !draggedInstance) return;
+            
             draggedInstance.el.style.left = (cx - dragOffset.x) + 'px';
             draggedInstance.el.style.top = (cy - dragOffset.y) + 'px';
 
@@ -492,7 +502,15 @@ class SoundSource {
         };
 
         const endDrag = (cx, cy) => {
-            if (!isDragging || !draggedInstance) return;
+            if (!isDragging) return;
+            
+            if (!hasMoved || !draggedInstance) {
+                isDragging = false;
+                hasMoved = false;
+                draggedInstance = null;
+                return;
+            }
+            
             isDragging = false;
             draggedInstance.el.style.zIndex = 50;
             document.getElementById('drop-hint').classList.replace('border-emerald-500/50', 'border-emerald-500/0');
@@ -565,6 +583,8 @@ class SpatiaApp {
             overlay.style.opacity = '0';
             setTimeout(() => overlay.remove(), 500);
         });
+
+        this.applySettings(this.loadSettings());
     }
 
     showBehaviorSettings(sound) {
@@ -921,10 +941,82 @@ class SpatiaApp {
         
         importBtn.onclick = () => importInput.click();
         
+        const settingsBtn = document.createElement('button');
+        settingsBtn.innerHTML = '⚙️';
+        settingsBtn.className = 'w-10 h-10 bg-gray-700 hover:bg-gray-600 rounded-full text-white transition-colors';
+        settingsBtn.title = 'Settings';
+        settingsBtn.onclick = () => this.showSettings();
+        
         controls.appendChild(exportBtn);
         controls.appendChild(importBtn);
+        controls.appendChild(settingsBtn);
         controls.appendChild(importInput);
         document.body.appendChild(controls);
+    }
+
+    loadSettings() {
+        const saved = localStorage.getItem('spatia-settings');
+        return saved ? JSON.parse(saved) : { backgroundUrl: 'images/bganim.gif' };
+    }
+
+    saveSettings(settings) {
+        localStorage.setItem('spatia-settings', JSON.stringify(settings));
+        this.applySettings(settings);
+    }
+
+    applySettings(settings) {
+        const room = document.getElementById('room');
+        const dock = document.getElementById('dock');
+        if (settings.backgroundUrl) {
+            document.body.style.backgroundImage = `url(${settings.backgroundUrl})`;
+            document.body.style.backgroundSize = 'cover';
+            document.body.style.backgroundPosition = 'center';
+            room.style.backgroundColor = 'rgba(26, 26, 26, 0.1)';
+            room.style.backdropFilter = 'blur(10px)';
+            room.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+            room.style.borderWidth = '3px';
+            dock.style.backgroundColor = 'rgba(31, 41, 55, 0.5)';
+        } else {
+            document.body.style.backgroundImage = '';
+            document.body.style.backgroundSize = '';
+            document.body.style.backgroundPosition = '';
+            room.style.backgroundColor = '';
+            room.style.backdropFilter = '';
+            room.style.borderColor = '';
+            room.style.borderWidth = '';
+            dock.style.backgroundColor = '';
+        }
+    }
+
+    showSettings() {
+        const settings = this.loadSettings();
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/50 z-[200] flex items-center justify-center';
+        overlay.innerHTML = `
+            <div class="bg-gray-800 rounded-lg p-6 w-96">
+                <h3 class="text-lg font-bold mb-4">Settings</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm mb-2">Background URL</label>
+                        <input id="bg-url" type="url" value="${settings.backgroundUrl}" placeholder="https://example.com/image.jpg" class="w-full bg-gray-700 rounded px-3 py-2">
+                    </div>
+                    <div class="flex gap-2 mt-6">
+                        <button id="save-settings" class="flex-1 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded">Save</button>
+                        <button id="cancel-settings" class="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        document.getElementById('save-settings').onclick = () => {
+            const bgUrl = document.getElementById('bg-url').value;
+            this.saveSettings({ backgroundUrl: bgUrl });
+            overlay.remove();
+        };
+
+        document.getElementById('cancel-settings').onclick = () => overlay.remove();
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     }
 
     showStreamDialog() {

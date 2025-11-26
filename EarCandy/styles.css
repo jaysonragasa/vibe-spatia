@@ -80,8 +80,27 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     max-height: 200px;
-    overflow-y: auto;
-    overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+    #dock {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        justify-content: flex-start;
+        background-color: transparent !important;
+        backdrop-filter: none !important;
+        border: none !important;
+        padding: 0.5rem !important;
+        max-height: none;
+    }
+    #dock::-webkit-scrollbar {
+        height: 4px;
+    }
+    #dock::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 2px;
+    }
 }
 
 .dock-slot {
