@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Spatia - Soundscape Composer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-gray-900 text-white h-screen flex flex-col items-center justify-between p-4 overflow-hidden select-none">
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-between p-4 overflow-hidden select-none" style="padding-bottom: max(1rem, env(safe-area-inset-bottom));">
 
     <!-- Header -->
     <div class="text-center mt-4 z-10 pointer-events-none">
@@ -38,7 +38,7 @@
     </div>
 
     <!-- The Dock -->
-    <div class="w-full mb-8 z-50 px-4">
+    <div class="w-full z-50 px-4 pb-10">
         <p class="text-center text-gray-500 text-xs mb-2">DRAG ICONS INTO SPACE</p>
         <div id="dock" class="bg-gray-800/80 backdrop-blur-md rounded-2xl p-4 flex justify-around items-center border border-gray-700 shadow-xl md:flex-wrap overflow-x-auto">
             <!-- Slots will be populated by JS -->

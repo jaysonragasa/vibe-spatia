@@ -171,6 +171,19 @@ class SoundSource {
     }
 
     createAudioSource(ctx) {
+        if (this.embedAudioSource) {
+            this.embedAudioSource.connect(CONFIG.USE_FILTERS ? this.filterNode : this.pannerNode);
+            this.sourceNode = { 
+                stop: () => { 
+                    if (this.embedElement) {
+                        this.embedElement.pause();
+                        if (this.embedContainer) this.embedContainer.remove();
+                    }
+                }
+            };
+            return;
+        }
+        
         if (this.streamUrl) {
             console.log('[STREAM] Creating audio element for:', this.streamUrl);
             
