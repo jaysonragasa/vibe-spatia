@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Spatial 360 Audio Mixer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .touch-none { touch-action: none; }
+        .touch-pan-x { touch-action: pan-x; }
+        .tap-highlight-transparent { -webkit-tap-highlight-color: transparent; }
+        
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(2.0); opacity: 0; }
+        }
+        .animate-pulse-ring::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: 50%;
+            border: 2px solid currentColor;
+            animation: pulse-ring 2s infinite;
+            z-index: -1;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes flash-green {
+            0% { background-color: rgba(34, 197, 94, 0.5); }
+            100% { background-color: transparent; }
+        }
+        .flash-success {
+            animation: flash-green 1s ease-out;
+        }
+        
+        .room-boundary {
+            box-shadow: 0 0 40px rgba(0,0,0,0.5) inset, 0 0 20px rgba(59, 130, 246, 0.1);
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-slate-100 h-screen w-screen overflow-hidden flex flex-col font-sans touch-none select-none bg-cover bg-center bg-no-repeat bg-fixed" style="background-image: url('https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExcHlxYWwyamF2Z2l1d3JiZ3hmYms1ZHdibDUyZDJoNTR2OHpvb3UxZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/IAb717kg5jMkMhNofp/giphy.gif');">
+
+    <!-- HEADER -->
+    <header class="p-4 flex justify-between items-center bg-slate-900/20 backdrop-blur-md z-10 border-b border-white/10 shrink-0">
+        <div class="flex items-center gap-2">
+            <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m2.5-13.414a5 5 0 00-1.414-1.414"/></svg>
+            <h1 class="font-bold text-lg tracking-wide">Spatial 360</h1>
+        </div>
+        <div class="flex gap-3">
+             <button id="btn-settings" class="p-2 bg-white/10 rounded-full hover:bg-white/20 active:scale-95 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </button>
+             <button id="btn-master-mute" class="p-2 bg-white/10 rounded-full hover:bg-white/20 active:scale-95 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15.536a5 5 0 001.414 1.414m2.5-13.414a5 5 0 00-1.414-1.414"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 relative flex items-center justify-center overflow-hidden">
+        <div id="spatial-room" class="room-boundary relative rounded-full border border-white/10 bg-slate-800/20 backdrop-blur-xl" style="width: 320px; height: 320px;">
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-slate-400 flex flex-col items-center pointer-events-none z-0">
+                <svg class="w-12 h-12 opacity-80" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9v3h3v-3c0-2.21 1.79-4 4-4s4 1.79 4 4v3h3V9c0-3.87-3.13-7-7-7zM7 12c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h2v-6H7zm10 0v6h2c1.1 0 2-.9 2-2v-4c0-1.1-.9-2-2-2h-2z"/></svg>
+                <span class="text-xs mt-1 font-mono opacity-50">LISTENER</span>
+            </div>
+            <div id="node-container" class="absolute top-0 left-0 w-full h-full z-10"></div>
+        </div>
+        
+        <div class="absolute bottom-6 text-slate-400/60 text-xs text-center pointer-events-none z-0">
+            Click 'Add' tools to import.<br>Drag items from dock to room.
+        </div>
+    </main>
+
+    <!-- AUDIO LIBRARY (Bottom Bar) -->
+    <div id="library-container" class="shrink-0 bg-slate-900/30 backdrop-blur-md z-30 pb-safe transition-colors duration-300">
+        <span id="lib-notification" class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full bg-green-500 text-white text-[10px] px-2 py-1 rounded-t opacity-0 transition-opacity duration-500">Item Added to Dock!</span>
+        <div id="library-scroll" class="flex gap-4 px-4 py-4 overflow-x-auto no-scrollbar touch-pan-x min-h-[90px] items-center">
+            <!-- Items injected by JS -->
+        </div>
+    </div>
+
+    <!-- INSPECTOR PANEL -->
+    <aside id="inspector-panel" class="bg-slate-800/90 backdrop-blur-xl border-t border-white/10 p-6 rounded-t-2xl shadow-[0_-5px_20px_rgba(0,0,0,0.3)] transform transition-transform duration-300 translate-y-full z-40 absolute bottom-0 w-full max-w-md left-1/2 -translate-x-1/2">
+        <div class="w-12 h-1 bg-white/20 rounded-full mx-auto mb-4"></div>
+        <div class="flex justify-between items-center mb-4">
+            <h2 id="inspector-title" class="text-xl font-bold text-white">Selected Source</h2>
+            <button id="btn-close-inspector" class="text-slate-400 hover:text-white">✕</button>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="flex justify-between text-sm text-slate-400 mb-2">
+                    <span>Volume</span>
+                    <span id="inspector-volume-val">80%</span>
+                </label>
+                <input type="range" id="inspector-volume" min="0" max="2.0" step="0.01" class="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500">
+            </div>
+            <div class="flex gap-3 mt-4">
+                <button id="btn-inspector-mute" class="flex-1 py-3 bg-white/10 rounded-lg text-sm font-medium hover:bg-white/20 transition flex items-center justify-center gap-2">Mute</button>
+                <button id="btn-inspector-remove" class="flex-1 py-3 bg-red-900/30 text-red-400 border border-red-900/50 rounded-lg text-sm font-medium hover:bg-red-900/50 transition">Remove</button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-slate-800 border border-white/10 p-6 rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 transition-transform duration-300" id="settings-modal-content">
+            <h3 class="text-xl font-bold text-white mb-4">App Settings</h3>
+            <div class="mb-6">
+                <label class="block text-slate-400 text-xs uppercase font-bold mb-2">Background Image URL</label>
+                <input id="settings-bg-input" type="text" placeholder="https://example.com/image.jpg" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-600 text-sm">
+            </div>
+            <div class="flex justify-end gap-3 pt-2 border-t border-white/5">
+                <button id="btn-cancel-settings" class="px-4 py-2 text-slate-400 hover:text-white transition font-medium text-sm">Cancel</button>
+                <button id="btn-save-settings" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-bold transition shadow-lg hover:shadow-blue-500/25 text-sm">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STREAM MODAL -->
+    <div id="stream-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-slate-800 border border-white/10 p-6 rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 transition-transform duration-300" id="stream-modal-content">
+            <h3 class="text-xl font-bold text-white mb-4">Add Audio Stream</h3>
+            
+            <div class="mb-4">
+                <label class="block text-slate-400 text-xs uppercase font-bold mb-2">Audio Name</label>
+                <input id="stream-name-input" type="text" placeholder="e.g. LoFi Radio" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-600 text-sm">
+            </div>
+
+            <div class="mb-4 bg-slate-900/50 p-3 rounded-lg border border-white/5">
+                <label class="block text-slate-400 text-xs uppercase font-bold mb-2">Stream URL</label>
+                <input id="stream-url-input" type="text" placeholder="https://example.com/stream.mp3" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-600 text-sm">
+                
+                <div class="flex items-center gap-3 mt-3">
+                    <button id="btn-test-stream" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-bold uppercase tracking-wider rounded text-slate-300 transition flex items-center gap-1 border border-white/5">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        Test Link
+                    </button>
+                    <span id="stream-test-status" class="text-xs font-medium"></span>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-2">Must be a direct link (mp3/wav) and support CORS.</p>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-slate-400 text-xs uppercase font-bold mb-2">Cover Image (Optional)</label>
+                <input id="stream-image-input" type="file" accept="image/*" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-white hover:file:bg-slate-600 cursor-pointer">
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2 border-t border-white/5">
+                <button id="btn-cancel-stream" class="px-4 py-2 text-slate-400 hover:text-white transition font-medium text-sm">Cancel</button>
+                <button id="btn-save-stream" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-bold transition shadow-lg hover:shadow-blue-500/25 text-sm">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="start-overlay" class="fixed inset-0 bg-slate-900/95 z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="text-center p-8">
+            <div class="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse shadow-[0_0_40px_rgba(59,130,246,0.5)]">
+                <svg class="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Spatial Audio Mixer</h2>
+            <button id="btn-start" class="px-8 py-3 bg-white text-slate-900 font-bold rounded-full hover:scale-105 transition shadow-lg mt-4">Start Audio Engine</button>
+        </div>
+    </div>
+
+    <input type="file" id="file-import" accept="audio/*" class="hidden" multiple>
+
+    <script type="module">
+        const MathUtils = {
+            normalize: (value, size) => (value / size) * 2 - 1,
+            denormalize: (norm, size) => ((norm + 1) / 2) * size,
+            getDistance: (x, y) => Math.sqrt(x*x + y*y),
+            clamp: (val, min, max) => Math.min(Math.max(val, min), max)
+        };
+
+        class SoundGenerator {
+            static createNoiseBuffer(ctx, type = 'white') {
+                const bufferSize = 2 * ctx.sampleRate;
+                const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    let noise = Math.random() * 2 - 1;
+                    if (type === 'pink' || type === 'brown') {
+                        const b = [0,0,0,0,0,0,0]; 
+                        const white = Math.random() * 2 - 1;
+                        b[0] = 0.99886 * b[0] + white * 0.0555179;
+                        b[1] = 0.99332 * b[1] + white * 0.0750759;
+                        b[2] = 0.96900 * b[2] + white * 0.1538520;
+                        b[3] = 0.86650 * b[3] + white * 0.3104856;
+                        b[4] = 0.55000 * b[4] + white * 0.5329522;
+                        b[5] = -0.7616 * b[5] - white * 0.0168980;
+                        data[i] = b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + white * 0.5362;
+                        data[i] *= 0.11; 
+                        if(type === 'brown') data[i] *= 0.5;
+                    } else { data[i] = noise; }
+                }
+                return buffer;
+            }
+        }
+
+        class AudioEngine {
+            constructor() {
+                this.ctx = null;
+                this.masterGain = null;
+                this.isInitialized = false;
+            }
+            init() {
+                if (this.isInitialized) return;
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                const compressor = this.ctx.createDynamicsCompressor();
+                compressor.threshold.value = -24;
+                compressor.ratio.value = 12;
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.8;
+                this.masterGain.connect(compressor);
+                compressor.connect(this.ctx.destination);
+                this.isInitialized = true;
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+            }
+            getDestination() { return this.masterGain; }
+            getContext() { return this.ctx; }
+            getCurrentTime() { return this.ctx.currentTime; }
+        }
+        const audioEngine = new AudioEngine();
+
+        class AudioTrack {
+            constructor(id, type, customData = null, initialVolume = 0.7) {
+                this.id = id;
+                this.type = type; 
+                this.customData = customData;
+                this.volume = initialVolume;
+                this.isMuted = false;
+                this.sourceNode = null;
+                this.audioElement = null;
+
+                // FIXED: Initialize Audio Graph immediately
+                const ctx = audioEngine.getContext();
+                if(ctx) {
+                    this.gainNode = ctx.createGain();
+                    this.gainNode.gain.value = this.volume;
+                    
+                    this.pannerNode = ctx.createPanner();
+                    this.pannerNode.panningModel = 'HRTF';
+                    this.pannerNode.distanceModel = 'inverse'; 
+                    this.pannerNode.refDistance = 1;
+                    this.pannerNode.maxDistance = 10000;
+                    this.pannerNode.rolloffFactor = 2; 
+                    
+                    this.gainNode.connect(this.pannerNode);
+                    this.pannerNode.connect(audioEngine.getDestination());
+                }
+            }
+
+            async play(onLoad) {
+                const ctx = audioEngine.getContext();
+                if (!ctx) return;
+
+                // Graph already built in constructor, just handle source
+                try {
+                    let nextNode = null;
+
+                    if (this.customData instanceof File) {
+                        const arrayBuffer = await this.customData.arrayBuffer();
+                        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+                        this.sourceNode = ctx.createBufferSource();
+                        this.sourceNode.buffer = audioBuffer;
+                        this.sourceNode.loop = true;
+                        nextNode = this.sourceNode;
+                        this.sourceNode.start(0);
+                    } 
+                    else if (typeof this.customData === 'string' && this.customData.length > 5) {
+                        this.audioElement = new Audio();
+                        this.audioElement.src = this.customData;
+                        this.audioElement.crossOrigin = "anonymous";
+                        this.audioElement.loop = true;
+                        await this.audioElement.play();
+                        this.sourceNode = ctx.createMediaElementSource(this.audioElement);
+                        nextNode = this.sourceNode;
+                    } 
+                    else {
+                        // Procedural
+                        let noiseType = 'white';
+                        let freq = 1000;
+                        if (this.type === 'sea') { noiseType = 'pink'; freq = 400; }
+                        else if (this.type === 'rain') { noiseType = 'white'; freq = 1200; }
+                        else if (this.type === 'fire') { noiseType = 'brown'; freq = 200; }
+                        else if (this.type === 'wind') { noiseType = 'pink'; freq = 800; }
+                        else if (this.type === 'forest') { noiseType = 'pink'; freq = 3000; }
+
+                        this.sourceNode = ctx.createBufferSource();
+                        this.sourceNode.buffer = SoundGenerator.createNoiseBuffer(ctx, noiseType);
+                        this.sourceNode.loop = true;
+                        
+                        const filter = ctx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.value = (this.type === 'wind') ? 800 : 1000;
+                        if(this.type === 'wind') filter.Q.value = 5;
+                        this.sourceNode.connect(filter);
+                        nextNode = filter;
+                        this.sourceNode.start(0);
+                    }
+
+                    if (nextNode) {
+                        // Connect source to existing gain node
+                        nextNode.connect(this.gainNode);
+                        if(onLoad) onLoad(true);
+                    }
+                } catch (e) {
+                    console.error("Audio Load Error:", e);
+                    if(onLoad) onLoad(false);
+                }
+            }
+
+            setPosition(x, y) {
+                if (!this.pannerNode) return;
+                const SCALE_FACTOR = 10; 
+                this.pannerNode.positionX.value = x * SCALE_FACTOR; 
+                this.pannerNode.positionY.value = 0; 
+                this.pannerNode.positionZ.value = y * SCALE_FACTOR;
+            }
+
+            setVolume(val) {
+                this.volume = val;
+                if (this.gainNode && !this.isMuted) {
+                    this.gainNode.gain.setTargetAtTime(val, audioEngine.getCurrentTime(), 0.1);
+                }
+            }
+
+            toggleMute() {
+                this.isMuted = !this.isMuted;
+                if (this.gainNode) {
+                    const target = this.isMuted ? 0 : this.volume;
+                    this.gainNode.gain.setTargetAtTime(target, audioEngine.getCurrentTime(), 0.1);
+                }
+                return this.isMuted;
+            }
+
+            dispose() {
+                if (this.sourceNode) {
+                    try { if (this.sourceNode.stop) this.sourceNode.stop(); } catch(e) {}
+                    this.sourceNode.disconnect();
+                }
+                if (this.audioElement) {
+                    this.audioElement.pause();
+                    this.audioElement.src = "";
+                    this.audioElement = null;
+                }
+                if (this.gainNode) this.gainNode.disconnect();
+                if (this.pannerNode) this.pannerNode.disconnect();
+            }
+        }
+
+        class Renderer {
+            constructor(containerId, roomElementId) {
+                this.container = document.getElementById(containerId);
+                this.room = document.getElementById(roomElementId);
+            }
+
+            createNode(id, iconHtml, x, y) {
+                const el = document.createElement('div');
+                el.id = id;
+                el.className = `absolute w-12 h-12 -ml-6 -mt-6 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center cursor-pointer hover:border-white shadow-lg z-20 transition-transform active:scale-95 overflow-hidden`; 
+                el.innerHTML = iconHtml;
+                
+                const loader = document.createElement('div');
+                loader.id = `loader-${id}`;
+                loader.className = "absolute inset-0 rounded-full border-2 border-t-blue-400 border-transparent animate-spin-slow opacity-100 transition-opacity duration-300 pointer-events-none";
+                el.appendChild(loader);
+
+                this.container.appendChild(el);
+                this.updateNodePosition(id, x, y);
+                return el;
+            }
+
+            setNodeLoaded(id, success) {
+                const loader = document.getElementById(`loader-${id}`);
+                const node = document.getElementById(id);
+                if (loader) loader.classList.add('opacity-0');
+                if (!success && node) {
+                    node.classList.add('border-red-500');
+                }
+            }
+
+            removeNode(id) {
+                const el = document.getElementById(id);
+                if (el) el.remove();
+            }
+
+            updateNodePosition(id, normX, normY) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const rect = this.room.getBoundingClientRect();
+                const pixelX = MathUtils.denormalize(normX, rect.width);
+                const pixelY = MathUtils.denormalize(normY, rect.height);
+                el.style.left = `${pixelX}px`;
+                el.style.top = `${pixelY}px`;
+            }
+
+            setNodeVisualState(id, state) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.remove('bg-red-500', 'border-red-500', 'scale-110', 'bg-slate-800', 'border-blue-500', 'border-slate-600', 'animate-pulse-ring');
+                switch(state) {
+                    case 'danger': el.classList.add('bg-red-500', 'border-red-500', 'scale-110'); break;
+                    case 'active': el.classList.add('bg-slate-800', 'border-blue-500', 'animate-pulse-ring'); break;
+                    default: el.classList.add('bg-slate-800', 'border-slate-600');
+                }
+            }
+            
+            getRoomDimensions() { return this.room.getBoundingClientRect(); }
+
+            renderLibrary(items, onDragStart, onItemClick) {
+                const lib = document.getElementById('library-scroll');
+                lib.innerHTML = ''; 
+                items.forEach(item => {
+                    const el = document.createElement('div');
+                    el.className = "flex-shrink-0 flex flex-col items-center gap-2 p-2 group";
+                    const iconContainer = document.createElement('div');
+                    iconContainer.className = "w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shadow-md touch-none transition-colors group-hover:bg-white/10 group-hover:border-white/20 overflow-hidden relative"; 
+                    
+                    if (item.type.startsWith('tool_')) {
+                        iconContainer.classList.add('cursor-pointer', 'bg-white/10');
+                    } else {
+                        iconContainer.classList.add('cursor-grab');
+                    }
+
+                    const temp = document.createElement('div');
+                    temp.innerHTML = item.icon;
+                    const child = temp.firstElementChild;
+                    
+                    if (child.tagName === 'svg') {
+                        child.setAttribute('class', `w-6 h-6 ${item.color || 'text-slate-300'} pointer-events-none`); 
+                        iconContainer.appendChild(child);
+                    } else if (child.tagName === 'IMG') {
+                        child.className = "w-full h-full object-cover pointer-events-none"; 
+                        child.setAttribute('draggable', 'false'); 
+                        iconContainer.appendChild(child);
+                    }
+
+                    const label = document.createElement('span');
+                    label.className = "text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center max-w-[80px] truncate";
+                    label.innerText = item.name;
+                    el.appendChild(iconContainer);
+                    el.appendChild(label);
+
+                    if (item.type.startsWith('tool_')) {
+                        iconContainer.addEventListener('click', () => onItemClick(item));
+                        iconContainer.addEventListener('mousedown', (e) => e.stopPropagation());
+                        iconContainer.addEventListener('touchstart', (e) => e.stopPropagation());
+                    } else {
+                        const startDrag = (e) => {
+                             e.preventDefault(); 
+                             const pt = e.touches ? e.touches[0] : e;
+                             onDragStart(item, pt.clientX, pt.clientY);
+                        };
+                        iconContainer.addEventListener('mousedown', startDrag);
+                        iconContainer.addEventListener('touchstart', startDrag, {passive: false});
+                    }
+
+                    lib.appendChild(el);
+                });
+            }
+        }
+
+        class InputHandler {
+            constructor(callbacks) {
+                this.callbacks = callbacks; 
+                this.isDraggingNode = false;
+                this.isDraggingNew = false;
+                this.draggedNodeId = null;
+                this.ghostEl = null;
+                this.bindGlobal();
+            }
+            attachNode(element, id) {
+                const start = (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    this.isDraggingNode = true;
+                    this.draggedNodeId = id;
+                    const pt = e.touches ? e.touches[0] : e;
+                    this.callbacks.onNodeDragStart(id, pt.clientX, pt.clientY);
+                };
+                element.addEventListener('mousedown', start);
+                element.addEventListener('touchstart', start, {passive: false});
+            }
+            startNewDrag(itemData, x, y) {
+                this.isDraggingNew = true;
+                this.draggedNewItem = itemData;
+                this.ghostEl = document.createElement('div');
+                this.ghostEl.className = 'fixed w-14 h-14 rounded-full bg-blue-500/50 border-2 border-white flex items-center justify-center text-white z-50 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 shadow-2xl backdrop-blur-sm overflow-hidden';
+                
+                const temp = document.createElement('div');
+                temp.innerHTML = itemData.icon;
+                const child = temp.firstElementChild;
+                
+                if(child.tagName === 'svg') {
+                    child.setAttribute('class', 'w-8 h-8 text-white drop-shadow-md');
+                    this.ghostEl.appendChild(child);
+                } else if (child.tagName === 'IMG') {
+                    child.className = "w-full h-full object-cover";
+                    this.ghostEl.appendChild(child);
+                }
+                
+                this.ghostEl.style.left = x + 'px';
+                this.ghostEl.style.top = y + 'px';
+                document.body.appendChild(this.ghostEl);
+            }
+            bindGlobal() {
+                const move = (e) => {
+                    const pt = e.touches ? e.touches[0] : e;
+                    if (this.isDraggingNode) {
+                        e.preventDefault(); 
+                        this.callbacks.onNodeDragMove(pt.clientX, pt.clientY);
+                    } else if (this.isDraggingNew) {
+                         e.preventDefault();
+                         if(this.ghostEl) {
+                             this.ghostEl.style.left = pt.clientX + 'px';
+                             this.ghostEl.style.top = pt.clientY + 'px';
+                         }
+                    }
+                };
+                const end = (e) => {
+                    if (this.isDraggingNode) {
+                        this.callbacks.onNodeDragEnd();
+                        this.isDraggingNode = false;
+                        this.draggedNodeId = null;
+                    } 
+                    else if (this.isDraggingNew) {
+                        const pt = e.changedTouches ? e.changedTouches[0] : e;
+                        this.callbacks.onNewDrop(this.draggedNewItem, pt.clientX, pt.clientY);
+                        if(this.ghostEl) this.ghostEl.remove();
+                        this.ghostEl = null;
+                        this.isDraggingNew = false;
+                        this.draggedNewItem = null;
+                    }
+                };
+                window.addEventListener('mousemove', move);
+                window.addEventListener('touchmove', move, {passive: false});
+                window.addEventListener('mouseup', end);
+                window.addEventListener('touchend', end);
+            }
+        }
+
+        class App {
+            constructor() {
+                this.tracks = new Map();
+                this.activeId = null;
+                this.pendingFileDrop = null;
+                this.testAudio = null;
+                
+                this.ICONS = {
+                    file: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>`,
+                    stream: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>`,
+                    rain: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>`,
+                    sea: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`,
+                    fire: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>`,
+                    wind: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+                    forest: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>`,
+                    upload: `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>`
+                };
+
+                this.libraryItems = [
+                    { type: 'tool_upload', name: 'Add File', icon: this.ICONS.upload, color: 'text-slate-400' },
+                    { type: 'tool_stream', name: 'Add Stream', icon: this.ICONS.stream, color: 'text-slate-400' },
+                    { type: 'rain', name: 'Rain', icon: this.ICONS.rain, color: 'text-blue-400' },
+                    { type: 'sea', name: 'Ocean', icon: this.ICONS.sea, color: 'text-teal-400' },
+                    { type: 'fire', name: 'Fire', icon: this.ICONS.fire, color: 'text-orange-500' },
+                    { type: 'wind', name: 'Wind', icon: this.ICONS.wind, color: 'text-slate-300' },
+                    { type: 'forest', name: 'Forest', icon: this.ICONS.forest, color: 'text-green-500' },
+                ];
+
+                this.renderer = new Renderer('node-container', 'spatial-room');
+                this.inputHandler = new InputHandler({
+                    onNodeDragStart: (id) => this.handleDragStart(id),
+                    onNodeDragMove: (cx, cy) => this.handleDragMove(cx, cy),
+                    onNodeDragEnd: () => this.handleDragEnd(),
+                    onNewDrop: (item, cx, cy) => this.handleNewDrop(item, cx, cy)
+                });
+                
+                this.renderDock();
+                this.bindUI();
+                
+                this.loadSettings();
+            }
+
+            renderDock() {
+                this.renderer.renderLibrary(this.libraryItems, 
+                    (item, x, y) => { this.inputHandler.startNewDrag(item, x, y); },
+                    (item) => { this.handleToolClick(item); }
+                );
+            }
+
+            bindUI() {
+                document.getElementById('btn-start').addEventListener('click', () => {
+                    audioEngine.init();
+                    document.getElementById('start-overlay').classList.add('hidden');
+                });
+                document.getElementById('btn-close-inspector').addEventListener('click', () => this.closeInspector());
+                document.getElementById('inspector-volume').addEventListener('input', (e) => this.updateVolume(e.target.value));
+                document.getElementById('btn-inspector-mute').addEventListener('click', () => this.toggleMute());
+                document.getElementById('btn-inspector-remove').addEventListener('click', () => this.removeTrack(this.activeId));
+                document.getElementById('file-import').addEventListener('change', (e) => this.handleFileSelect(e));
+                
+                document.getElementById('btn-cancel-stream').addEventListener('click', () => this.hideStreamModal());
+                document.getElementById('btn-save-stream').addEventListener('click', () => this.saveStream());
+                document.getElementById('btn-test-stream').addEventListener('click', () => this.testStream());
+                
+                document.getElementById('btn-settings').addEventListener('click', () => this.showSettingsModal());
+                document.getElementById('btn-cancel-settings').addEventListener('click', () => this.hideSettingsModal());
+                document.getElementById('btn-save-settings').addEventListener('click', () => this.saveSettings());
+
+                const libScroll = document.getElementById('library-scroll');
+                libScroll.addEventListener('wheel', (evt) => {
+                    if (evt.deltaY !== 0) {
+                        evt.preventDefault();
+                        libScroll.scrollLeft += evt.deltaY;
+                    }
+                }, { passive: false });
+
+                window.addEventListener('resize', () => this.refreshLayout());
+            }
+
+            handleToolClick(item) {
+                if (item.type === 'tool_upload') {
+                    document.getElementById('file-import').click();
+                } else if (item.type === 'tool_stream') {
+                    this.showStreamModal();
+                }
+            }
+
+            showSettingsModal() {
+                const modal = document.getElementById('settings-modal');
+                const content = document.getElementById('settings-modal-content');
+                modal.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    modal.classList.remove('opacity-0');
+                    content.classList.remove('scale-95');
+                    content.classList.add('scale-100');
+                });
+            }
+
+            hideSettingsModal() {
+                const modal = document.getElementById('settings-modal');
+                const content = document.getElementById('settings-modal-content');
+                modal.classList.add('opacity-0');
+                content.classList.remove('scale-100');
+                content.classList.add('scale-95');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            }
+
+            loadSettings() {
+                const savedBg = localStorage.getItem('spatial_mixer_bg');
+                if (savedBg) {
+                    document.body.style.backgroundImage = `url('${savedBg}')`;
+                }
+            }
+
+            saveSettings() {
+                const url = document.getElementById('settings-bg-input').value.trim();
+                if (url) {
+                    document.body.style.backgroundImage = `url('${url}')`;
+                    localStorage.setItem('spatial_mixer_bg', url); 
+                    this.hideSettingsModal();
+                } else {
+                    alert("Please enter a valid Image URL.");
+                }
+            }
+
+            showStreamModal() {
+                const modal = document.getElementById('stream-modal');
+                const content = document.getElementById('stream-modal-content');
+                modal.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    modal.classList.remove('opacity-0');
+                    content.classList.remove('scale-95');
+                    content.classList.add('scale-100');
+                });
+            }
+
+            hideStreamModal() {
+                const modal = document.getElementById('stream-modal');
+                const content = document.getElementById('stream-modal-content');
+                
+                if (this.testAudio) {
+                    this.testAudio.pause();
+                    this.testAudio = null;
+                }
+                document.getElementById('stream-test-status').innerText = '';
+                document.getElementById('stream-test-status').className = 'text-xs font-medium';
+
+                modal.classList.add('opacity-0');
+                content.classList.remove('scale-100');
+                content.classList.add('scale-95');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    document.getElementById('stream-url-input').value = ''; 
+                    document.getElementById('stream-name-input').value = ''; 
+                    document.getElementById('stream-image-input').value = ''; 
+                }, 300);
+            }
+
+            testStream() {
+                let url = document.getElementById('stream-url-input').value.trim();
+                const statusEl = document.getElementById('stream-test-status');
+                
+                if (!url) {
+                    statusEl.innerText = 'Enter URL first';
+                    statusEl.className = 'text-xs font-medium text-orange-400';
+                    return;
+                }
+                if (!url.startsWith('http')) url = 'https://' + url;
+
+                statusEl.innerText = 'Testing...';
+                statusEl.className = 'text-xs font-medium text-blue-400 animate-pulse';
+
+                if (this.testAudio) {
+                    this.testAudio.pause();
+                    this.testAudio = null;
+                }
+
+                this.testAudio = new Audio(url);
+                this.testAudio.crossOrigin = "anonymous";
+                this.testAudio.volume = 0; 
+
+                const onSuccess = () => {
+                    statusEl.innerText = 'Valid Stream';
+                    statusEl.className = 'text-xs font-medium text-green-400';
+                    this.testAudio = null;
+                };
+
+                const onError = (e) => {
+                    console.error("Stream Test Failed", e);
+                    statusEl.innerText = 'Connection Failed';
+                    statusEl.className = 'text-xs font-medium text-red-400';
+                    this.testAudio = null;
+                };
+
+                this.testAudio.addEventListener('canplay', onSuccess, { once: true });
+                this.testAudio.addEventListener('error', onError, { once: true });
+                this.testAudio.load();
+            }
+
+            saveStream() {
+                let url = document.getElementById('stream-url-input').value.trim();
+                const name = document.getElementById('stream-name-input').value.trim() || 'Stream';
+                const imageFile = document.getElementById('stream-image-input').files[0];
+
+                if (url) {
+                    if (!url.startsWith('http')) url = 'https://' + url;
+
+                    let iconHtml = this.ICONS.stream;
+                    let color = 'text-purple-400';
+
+                    if (imageFile) {
+                        const imgUrl = URL.createObjectURL(imageFile);
+                        iconHtml = `<img src="${imgUrl}" class="w-full h-full object-cover pointer-events-none" alt="${name}">`;
+                        color = ''; 
+                    }
+
+                    this.addToLibrary('stream', name, url, iconHtml, color);
+                    this.hideStreamModal();
+                } else {
+                    alert("Please enter a valid URL.");
+                }
+            }
+
+            handleNewDrop(item, clientX, clientY) {
+                const rect = this.renderer.getRoomDimensions();
+                const inRoom = (clientX >= rect.left && clientX <= rect.right &&
+                                clientY >= rect.top && clientY <= rect.bottom);
+                
+                if (inRoom) {
+                    const normX = MathUtils.normalize(clientX - rect.left, rect.width);
+                    const normY = MathUtils.normalize(clientY - rect.top, rect.height);
+                    const dist = MathUtils.getDistance(normX, normY);
+                    if(dist <= 1.0) {
+                        this.addTrack(item.name, item.type, item.customData, item.color, normX, normY, item.icon);
+                    }
+                }
+            }
+
+            handleFileSelect(e) {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    Array.from(files).forEach(file => {
+                        const safeName = file.name.length > 10 ? file.name.substring(0, 8) + '...' : file.name;
+                        this.addToLibrary('file', safeName, file, this.ICONS.file, 'text-pink-400');
+                    });
+                }
+                e.target.value = ''; 
+            }
+
+            addToLibrary(type, name, customData, icon, color) {
+                const newItem = {
+                    type: type + '_' + Date.now() + Math.random(), // Unique ID
+                    name: name,
+                    icon: icon,
+                    color: color,
+                    customData: customData
+                };
+                this.libraryItems.splice(2, 0, newItem);
+                this.renderDock();
+                const dock = document.getElementById('library-container');
+                const notif = document.getElementById('lib-notification');
+                dock.classList.add('flash-success');
+                notif.classList.remove('opacity-0');
+                setTimeout(() => {
+                    dock.classList.remove('flash-success');
+                    notif.classList.add('opacity-0');
+                }, 1000);
+            }
+
+            async addTrack(name, type, customData, colorClass, startX, startY, iconHtml) {
+                const id = Date.now() + Math.random().toString();
+                const audioTrack = new AudioTrack(id, type, customData);
+                
+                const temp = document.createElement('div');
+                if (!iconHtml) {
+                    const libItem = this.libraryItems.find(i => i.type === type) || 
+                                    this.libraryItems.find(i => type.startsWith(i.type.split('_')[0])); 
+                    iconHtml = libItem ? libItem.icon : this.ICONS.file;
+                }
+                
+                temp.innerHTML = iconHtml;
+                const child = temp.firstElementChild;
+                
+                if(child.tagName === 'svg' && colorClass) {
+                    child.setAttribute('class', `w-8 h-8 ${colorClass}`);
+                } else if (child.tagName === 'IMG') {
+                    child.className = "w-full h-full object-cover pointer-events-none"; 
+                }
+
+                const element = this.renderer.createNode(id, temp.innerHTML, startX, startY);
+                element.addEventListener('click', () => this.activateTrack(id));
+                this.inputHandler.attachNode(element, id);
+                this.tracks.set(id, { logic: audioTrack, x: startX, y: startY, name: name });
+                
+                // IMPORTANT: Position must be set AFTER node creation but BEFORE play
+                audioTrack.setPosition(startX, startY);
+
+                await audioTrack.play((success) => {
+                    this.renderer.setNodeLoaded(id, success);
+                    if (!success) alert("Failed to play audio stream. Check URL or CORS settings.");
+                });
+            }
+
+            removeTrack(id) {
+                if (!this.tracks.has(id)) return;
+                const track = this.tracks.get(id);
+                track.logic.dispose();
+                this.renderer.removeNode(id);
+                this.tracks.delete(id);
+                if (this.activeId === id) this.closeInspector();
+            }
+
+            handleDragStart(id) {
+                this.draggedId = id;
+                this.activateTrack(id);
+            }
+
+            handleDragMove(clientX, clientY) {
+                if (!this.draggedId) return;
+                const rect = this.renderer.getRoomDimensions();
+                const normX = MathUtils.normalize(clientX - rect.left, rect.width);
+                const normY = MathUtils.normalize(clientY - rect.top, rect.height);
+                const dist = MathUtils.getDistance(normX, normY);
+                const track = this.tracks.get(this.draggedId);
+                
+                let audioX = normX, audioY = normY;
+                if (dist > 1.0) { audioX = normX/dist; audioY = normY/dist; }
+                track.logic.setPosition(audioX, audioY);
+
+                track.x = normX; track.y = normY;
+                this.renderer.updateNodePosition(this.draggedId, normX, normY);
+
+                if (dist > 1.1) this.renderer.setNodeVisualState(this.draggedId, 'danger');
+                else this.renderer.setNodeVisualState(this.draggedId, 'active');
+            }
+
+            handleDragEnd() {
+                if (!this.draggedId) return;
+                const track = this.tracks.get(this.draggedId);
+                const dist = MathUtils.getDistance(track.x, track.y);
+
+                if (dist > 1.1) this.removeTrack(this.draggedId);
+                else if (dist > 1.0) {
+                    const snapX = track.x / dist;
+                    const snapY = track.y / dist;
+                    track.x = snapX; track.y = snapY;
+                    track.logic.setPosition(snapX, snapY);
+                    this.renderer.updateNodePosition(this.draggedId, snapX, snapY);
+                    this.renderer.setNodeVisualState(this.draggedId, 'active');
+                }
+                this.draggedId = null;
+            }
+
+            activateTrack(id) {
+                this.tracks.forEach((_, key) => { if (key !== id) this.renderer.setNodeVisualState(key, 'idle'); });
+                this.activeId = id;
+                this.renderer.setNodeVisualState(id, 'active');
+                const track = this.tracks.get(id);
+                document.getElementById('inspector-title').innerText = track.name;
+                document.getElementById('inspector-volume').value = track.logic.volume;
+                document.getElementById('inspector-volume-val').innerText = Math.round(track.logic.volume * 100) + '%';
+                document.getElementById('inspector-panel').classList.remove('translate-y-full');
+            }
+
+            closeInspector() {
+                document.getElementById('inspector-panel').classList.add('translate-y-full');
+                if (this.activeId && this.tracks.has(this.activeId)) {
+                    this.renderer.setNodeVisualState(this.activeId, 'idle');
+                    this.activeId = null;
+                }
+            }
+
+            updateVolume(val) {
+                if (this.activeId) {
+                    this.tracks.get(this.activeId).logic.setVolume(val);
+                    document.getElementById('inspector-volume-val').innerText = Math.round(val * 100) + '%';
+                }
+            }
+
+            toggleMute() {
+                if (this.activeId) {
+                    const isMuted = this.tracks.get(this.activeId).logic.toggleMute();
+                    const btn = document.getElementById('btn-inspector-mute');
+                    btn.innerText = isMuted ? "Unmute" : "Mute";
+                    btn.classList.toggle('bg-red-600', isMuted);
+                }
+            }
+            
+            refreshLayout() {
+                this.tracks.forEach((track, id) => {
+                    this.renderer.updateNodePosition(id, track.x, track.y);
+                });
+            }
+        }
+
+        const app = new App();
+
+    </script>
+</body>
+</html>
