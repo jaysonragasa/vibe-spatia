@@ -393,13 +393,26 @@
                     // If switching TO seamless loop
                     if (this.repeatDelay === 0) {
                         this.sourceNode.loop = true;
-                        if (this.timer) clearTimeout(this.timer); // Clear any pending restarts
+                        this.sourceNode.onended = null; // Remove restart logic
+                        if (this.timer) {
+                            clearTimeout(this.timer); // Cancel any pending restart
+                            this.timer = null;
+                            this._playSource(); // If we were waiting, start immediately
+                        }
                     } 
                     // If switching TO delay (intermittent)
                     else {
                         this.sourceNode.loop = false; 
-                        // If it's currently looping, loop=false will make it play to end then trigger onended, 
-                        // which now handles the delay logic.
+                        
+                        // FIXED: Attach the onended handler dynamically so it knows to restart.
+                        // (Previously this was missing, causing it to stop forever)
+                        this.sourceNode.onended = () => {
+                            if (this.isPlaying && this.repeatDelay > 0) {
+                                this.timer = setTimeout(() => {
+                                    this._playSource();
+                                }, this.repeatDelay * 1000);
+                            }
+                        };
                     }
                 }
 
@@ -407,9 +420,14 @@
                 if (this.audioElement) {
                     if (this.repeatDelay === 0) {
                         this.audioElement.loop = true;
+                        this.audioElement.onended = null;
+                        if (this.timer) {
+                            clearTimeout(this.timer);
+                            this.timer = null;
+                            this.audioElement.play();
+                        }
                     } else {
                         this.audioElement.loop = false;
-                        // Attach onended logic for streams
                         this.audioElement.onended = () => {
                             if (this.isPlaying && this.repeatDelay > 0) {
                                 this.timer = setTimeout(() => {
