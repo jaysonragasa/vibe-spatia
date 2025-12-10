@@ -96,6 +96,7 @@
             <button id="btn-close-inspector" class="text-slate-400 hover:text-white">✕</button>
         </div>
         <div class="space-y-4">
+            <!-- VOLUME -->
             <div>
                 <label class="flex justify-between text-sm text-slate-400 mb-2">
                     <span>Volume</span>
@@ -103,6 +104,18 @@
                 </label>
                 <input type="range" id="inspector-volume" min="0" max="2.0" step="0.01" class="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500">
             </div>
+            
+            <!-- REPEAT DELAY (New) -->
+            <div>
+                <label class="flex justify-between text-sm text-slate-400 mb-2">
+                    <span>Repeat Delay</span>
+                    <span id="inspector-delay-val">0s (Loop)</span>
+                </label>
+                <input type="range" id="inspector-delay" min="0" max="60" step="1" value="0" class="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                <p class="text-[10px] text-slate-500 mt-1">0s = Seamless Loop. >0s = Wait before repeating.</p>
+            </div>
+
+            <!-- BUTTONS -->
             <div class="flex gap-3 mt-4">
                 <button id="btn-inspector-mute" class="flex-1 py-3 bg-white/10 rounded-lg text-sm font-medium hover:bg-white/20 transition flex items-center justify-center gap-2">Mute</button>
                 <button id="btn-inspector-remove" class="flex-1 py-3 bg-red-900/30 text-red-400 border border-red-900/50 rounded-lg text-sm font-medium hover:bg-red-900/50 transition">Remove</button>
@@ -239,10 +252,16 @@
                 this.customData = customData;
                 this.volume = initialVolume;
                 this.isMuted = false;
+                this.repeatDelay = 0; // seconds. 0 = seamless loop
+                this.isPlaying = false;
+                this.timer = null;
+                
+                // Cache for re-use logic
+                this.audioBuffer = null; 
                 this.sourceNode = null;
                 this.audioElement = null;
 
-                // FIXED: Initialize Audio Graph immediately
+                // Initialize Audio Graph immediately so position logic works
                 const ctx = audioEngine.getContext();
                 if(ctx) {
                     this.gainNode = ctx.createGain();
@@ -263,60 +282,142 @@
             async play(onLoad) {
                 const ctx = audioEngine.getContext();
                 if (!ctx) return;
+                
+                // Prevent multiple plays
+                if (this.isPlaying) return;
+                this.isPlaying = true;
 
-                // Graph already built in constructor, just handle source
+                // Check if already cached (BufferSource)
+                if (this.audioBuffer) {
+                    this._playSource();
+                    if(onLoad) onLoad(true);
+                    return;
+                }
+
+                // If element already exists (Stream)
+                if (this.audioElement) {
+                    this.audioElement.play();
+                    if(onLoad) onLoad(true);
+                    return;
+                }
+
                 try {
-                    let nextNode = null;
-
+                    // --- BUFFER SOURCE LOADING ---
                     if (this.customData instanceof File) {
                         const arrayBuffer = await this.customData.arrayBuffer();
-                        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-                        this.sourceNode = ctx.createBufferSource();
-                        this.sourceNode.buffer = audioBuffer;
-                        this.sourceNode.loop = true;
-                        nextNode = this.sourceNode;
-                        this.sourceNode.start(0);
+                        this.audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+                        this._playSource();
+                        if(onLoad) onLoad(true);
                     } 
+                    // --- MEDIA ELEMENT (STREAM) ---
                     else if (typeof this.customData === 'string' && this.customData.length > 5) {
                         this.audioElement = new Audio();
                         this.audioElement.src = this.customData;
                         this.audioElement.crossOrigin = "anonymous";
-                        this.audioElement.loop = true;
-                        await this.audioElement.play();
-                        this.sourceNode = ctx.createMediaElementSource(this.audioElement);
-                        nextNode = this.sourceNode;
-                    } 
-                    else {
-                        // Procedural
-                        let noiseType = 'white';
-                        let freq = 1000;
-                        if (this.type === 'sea') { noiseType = 'pink'; freq = 400; }
-                        else if (this.type === 'rain') { noiseType = 'white'; freq = 1200; }
-                        else if (this.type === 'fire') { noiseType = 'brown'; freq = 200; }
-                        else if (this.type === 'wind') { noiseType = 'pink'; freq = 800; }
-                        else if (this.type === 'forest') { noiseType = 'pink'; freq = 3000; }
-
-                        this.sourceNode = ctx.createBufferSource();
-                        this.sourceNode.buffer = SoundGenerator.createNoiseBuffer(ctx, noiseType);
-                        this.sourceNode.loop = true;
+                        this.audioElement.loop = (this.repeatDelay === 0);
                         
-                        const filter = ctx.createBiquadFilter();
-                        filter.type = 'lowpass';
-                        filter.frequency.value = (this.type === 'wind') ? 800 : 1000;
-                        if(this.type === 'wind') filter.Q.value = 5;
-                        this.sourceNode.connect(filter);
-                        nextNode = filter;
-                        this.sourceNode.start(0);
-                    }
+                        await this.audioElement.play();
+                        
+                        const source = ctx.createMediaElementSource(this.audioElement);
+                        source.connect(this.gainNode); // Connect to graph
+                        if(onLoad) onLoad(true);
+                    } 
+                    // --- PROCEDURAL ---
+                    else {
+                        let noiseType = 'white';
+                        // Logic to pick type...
+                        if (this.type === 'sea') noiseType = 'pink';
+                        else if (this.type === 'rain') noiseType = 'white';
+                        else if (this.type === 'fire') noiseType = 'brown';
+                        else if (this.type === 'wind') noiseType = 'pink';
+                        else if (this.type === 'forest') noiseType = 'pink';
 
-                    if (nextNode) {
-                        // Connect source to existing gain node
-                        nextNode.connect(this.gainNode);
+                        this.audioBuffer = SoundGenerator.createNoiseBuffer(ctx, noiseType);
+                        
+                        // Procedural often needs a filter attached before gain
+                        this.filterNode = ctx.createBiquadFilter();
+                        this.filterNode.type = 'lowpass';
+                        this.filterNode.frequency.value = (this.type === 'wind') ? 800 : 1000;
+                        if(this.type === 'wind') this.filterNode.Q.value = 5;
+                        
+                        this.filterNode.connect(this.gainNode);
+                        this._playSource();
                         if(onLoad) onLoad(true);
                     }
                 } catch (e) {
                     console.error("Audio Load Error:", e);
+                    this.isPlaying = false;
                     if(onLoad) onLoad(false);
+                }
+            }
+
+            // Internal: Create and start a BufferSource
+            _playSource() {
+                if (!this.audioBuffer || !this.isPlaying) return;
+                
+                const ctx = audioEngine.getContext();
+                this.sourceNode = ctx.createBufferSource();
+                this.sourceNode.buffer = this.audioBuffer;
+                
+                // Logic for Delay vs Seamless
+                if (this.repeatDelay === 0) {
+                    this.sourceNode.loop = true;
+                } else {
+                    this.sourceNode.loop = false;
+                    this.sourceNode.onended = () => {
+                        if (this.isPlaying && this.repeatDelay > 0) {
+                            this.timer = setTimeout(() => {
+                                this._playSource();
+                            }, this.repeatDelay * 1000);
+                        }
+                    };
+                }
+
+                // Connect logic (handle filter if exists)
+                if (this.filterNode) {
+                    this.sourceNode.connect(this.filterNode);
+                } else {
+                    this.sourceNode.connect(this.gainNode);
+                }
+                
+                this.sourceNode.start(0);
+            }
+
+            setRepeatDelay(seconds) {
+                this.repeatDelay = parseFloat(seconds);
+                
+                // --- Update Live Playback Logic ---
+                
+                // 1. Buffer Sources (Files/Procedural)
+                if (this.sourceNode) {
+                    // If switching TO seamless loop
+                    if (this.repeatDelay === 0) {
+                        this.sourceNode.loop = true;
+                        if (this.timer) clearTimeout(this.timer); // Clear any pending restarts
+                    } 
+                    // If switching TO delay (intermittent)
+                    else {
+                        this.sourceNode.loop = false; 
+                        // If it's currently looping, loop=false will make it play to end then trigger onended, 
+                        // which now handles the delay logic.
+                    }
+                }
+
+                // 2. Media Elements (Streams)
+                if (this.audioElement) {
+                    if (this.repeatDelay === 0) {
+                        this.audioElement.loop = true;
+                    } else {
+                        this.audioElement.loop = false;
+                        // Attach onended logic for streams
+                        this.audioElement.onended = () => {
+                            if (this.isPlaying && this.repeatDelay > 0) {
+                                this.timer = setTimeout(() => {
+                                    this.audioElement.play();
+                                }, this.repeatDelay * 1000);
+                            }
+                        };
+                    }
                 }
             }
 
@@ -345,6 +446,9 @@
             }
 
             dispose() {
+                this.isPlaying = false;
+                if (this.timer) clearTimeout(this.timer);
+                
                 if (this.sourceNode) {
                     try { if (this.sourceNode.stop) this.sourceNode.stop(); } catch(e) {}
                     this.sourceNode.disconnect();
@@ -609,6 +713,9 @@
                 document.getElementById('btn-inspector-remove').addEventListener('click', () => this.removeTrack(this.activeId));
                 document.getElementById('file-import').addEventListener('change', (e) => this.handleFileSelect(e));
                 
+                // New Delay Slider Binding
+                document.getElementById('inspector-delay').addEventListener('input', (e) => this.updateDelay(e.target.value));
+
                 document.getElementById('btn-cancel-stream').addEventListener('click', () => this.hideStreamModal());
                 document.getElementById('btn-save-stream').addEventListener('click', () => this.saveStream());
                 document.getElementById('btn-test-stream').addEventListener('click', () => this.testStream());
@@ -845,7 +952,6 @@
                 this.inputHandler.attachNode(element, id);
                 this.tracks.set(id, { logic: audioTrack, x: startX, y: startY, name: name });
                 
-                // IMPORTANT: Position must be set AFTER node creation but BEFORE play
                 audioTrack.setPosition(startX, startY);
 
                 await audioTrack.play((success) => {
@@ -912,6 +1018,13 @@
                 document.getElementById('inspector-title').innerText = track.name;
                 document.getElementById('inspector-volume').value = track.logic.volume;
                 document.getElementById('inspector-volume-val').innerText = Math.round(track.logic.volume * 100) + '%';
+                
+                // Sync Delay
+                const delaySlider = document.getElementById('inspector-delay');
+                const delayLabel = document.getElementById('inspector-delay-val');
+                delaySlider.value = track.logic.repeatDelay;
+                delayLabel.innerText = track.logic.repeatDelay === 0 ? "0s (Loop)" : `${track.logic.repeatDelay}s`;
+
                 document.getElementById('inspector-panel').classList.remove('translate-y-full');
             }
 
@@ -927,6 +1040,14 @@
                 if (this.activeId) {
                     this.tracks.get(this.activeId).logic.setVolume(val);
                     document.getElementById('inspector-volume-val').innerText = Math.round(val * 100) + '%';
+                }
+            }
+
+            updateDelay(val) {
+                if (this.activeId) {
+                    const delay = parseInt(val);
+                    this.tracks.get(this.activeId).logic.setRepeatDelay(delay);
+                    document.getElementById('inspector-delay-val').innerText = delay === 0 ? "0s (Loop)" : `${delay}s`;
                 }
             }
 
